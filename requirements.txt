@@ -1,0 +1,2 @@
+python-telegram-bot[job-queue]==21.6
+git+https://github.com/TheBooleanJulian/thebooleanjulian-bot-core.git@main
