@@ -1,0 +1,10 @@
+{
+  "name": "bot-core-canary",
+  "private": true,
+  "type": "module",
+  "description": "Pre-flight canary for the shared JS bot skeleton (lib/), on Cloudflare Workers",
+  "scripts": {
+    "test": "node --test",
+    "deploy": "npx wrangler deploy"
+  }
+}
