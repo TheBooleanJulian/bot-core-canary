@@ -1,0 +1,13 @@
+{
+  "name": "bot-core-canary",
+  "private": true,
+  "type": "module",
+  "description": "Canary for thebooleanjulian-bot-core (JS edition) on Cloudflare Workers: deploys first, gates the fleet fan-out",
+  "scripts": {
+    "test": "node --test",
+    "deploy": "npx wrangler deploy"
+  },
+  "dependencies": {
+    "thebooleanjulian-bot-core": "github:TheBooleanJulian/thebooleanjulian-bot-core#main"
+  }
+}
