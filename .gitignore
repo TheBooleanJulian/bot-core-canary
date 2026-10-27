@@ -2,3 +2,4 @@
 # Cloudflare Wrangler local state
 .wrangler/
 __pycache__/
+node_modules/
