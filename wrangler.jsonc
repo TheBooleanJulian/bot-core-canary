@@ -1,0 +1,16 @@
+{
+  // bot-core-canary on Cloudflare Workers (webhook mode, no polling).
+  // Secrets (optional; without them only /healthz and the cron run):
+  //   npx wrangler secret put BOT_TOKEN
+  //   npx wrangler secret put WEBHOOK_SECRET      any long random string
+  //   npx wrangler secret put OWNER_TELEGRAM_ID
+  // Then point Telegram at it once:
+  //   curl "https://api.telegram.org/bot<BOT_TOKEN>/setWebhook" -d url=https://bot-core-canary.juliancheung.workers.dev/webhook -d secret_token=<WEBHOOK_SECRET>
+  "name": "bot-core-canary",
+  "account_id": "c580c4403524273d1bece674117472dd",
+  "main": "worker.js",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "triggers": { "crons": ["0 * * * *"] },
+  "observability": { "enabled": true }
+}
