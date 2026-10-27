@@ -1,17 +1,17 @@
-// bot-core-canary on Cloudflare Workers: the pre-flight check for the shared JS bot skeleton (lib/).
-// Same job as main.py had for the Python bot-core: if the skeleton is broken, this fails first,
-// loudly, before any real bot picks the change up.
+// bot-core-canary on Cloudflare Workers: the gate for thebooleanjulian-bot-core's JS edition.
+// propagate-workers.yml deploys this first, built against the exact bot-core commit, and only fans out
+// to the real bots once /healthz reports that commit with every self-check passing.
 //
-//   GET  /healthz  self-check of every lib module (200 pass, 500 fail)
+//   GET  /healthz  self-check of every bot-core module + the bot-core sha (200 pass, 500 fail)
+//   GET  /         branded status page (bot-core's statusPage on the Unified UI tokens)
 //   POST /webhook  Telegram updates (only when BOT_TOKEN + WEBHOOK_SECRET are set); /start is owner-only
 //   cron           re-runs the self-check and logs a heartbeat
 
-import { log, redact } from './lib/log.js';
-import { verifyWebhook, reply } from './lib/telegram.js';
-import { createRouter, parseCommand } from './lib/router.js';
-import { isAdmin, adminOnly } from './lib/admin.js';
-
-const BOT_NAME = 'bot-core canary';
+import {
+  log, redact, verifyWebhook, reply, createRouter, parseCommand, isAdmin, adminOnly, errorBoundary,
+  fmtSuccess, fmtStatusMessage, confirmKeyboard, paginatedKeyboard, fmtDatetime, healthz, statusPage,
+  renderStatusPage, BRAND_CSS, BOT_CORE_VERSION
+} from 'thebooleanjulian-bot-core';
 
 export function selfCheck() {
   const checks = {};
@@ -22,32 +22,40 @@ export function selfCheck() {
       checks[name] = `FAIL: ${err.message}`;
     }
   };
-  run('log', () => redact('bot123456:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij leaked') === 'bot<bot-token> leaked');
+  run('log', () => redact('https://api.telegram.org/bot123456:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij/getMe').includes('bot<bot-token>/getMe'));
   run('router', () => parseCommand('/start@CanaryBot hi', 'canarybot')?.name === 'start' && parseCommand('/start@OtherBot', 'canarybot') === null);
   run('admin', () => isAdmin({ OWNER_TELEGRAM_ID: '1, 2' }, 2) && !isAdmin({ OWNER_TELEGRAM_ID: '1' }, 3));
+  run('branding', () => fmtSuccess('ok') === '✅ <b>ok</b>' && fmtStatusMessage('c', 'online', {}).includes('ONLINE'));
+  run('ui', () => confirmKeyboard().inline_keyboard[0].length === 2 && paginatedKeyboard([['a', 'a']]).inline_keyboard.length === 1);
+  run('time', () => fmtDatetime(new Date('2026-10-27T02:30:00Z')) === '27 Oct 2026, 10:30 SGT');
+  run('brand', () => BRAND_CSS.includes('--cyan') && renderStatusPage({ name: 'x' }).includes('--magenta'));
+  run('version', () => /^\d+\.\d+\.\d+$/.test(BOT_CORE_VERSION));
   return checks;
 }
 
 const route = createRouter({
   commands: {
-    start: adminOnly((ctx) => reply(ctx.env, ctx.message, '✅ <b>canary alive</b> on Cloudflare Workers'))
+    start: adminOnly(errorBoundary((ctx) => reply(ctx.env, ctx.message, fmtSuccess('canary alive', 'on Cloudflare Workers'))))
   }
 });
-
-function json(body, status = 200) {
-  return new Response(JSON.stringify(body, null, 2), { status, headers: { 'Content-Type': 'application/json' } });
-}
 
 export default {
   async fetch(request, env, ctx) {
     const { pathname } = new URL(request.url);
 
-    if (pathname === '/healthz' || pathname === '/') {
-      const checks = selfCheck();
-      const ok = Object.values(checks).every((v) => v === 'ok');
-      return json({ bot: BOT_NAME, status: ok ? 'pass' : 'fail', checks, webhook: Boolean(env.BOT_TOKEN && env.WEBHOOK_SECRET) }, ok ? 200 : 500);
+    if (pathname === '/healthz') {
+      return healthz(env, { checks: selfCheck(), extra: { webhook: Boolean(env.BOT_TOKEN && env.WEBHOOK_SECRET) } });
     }
-
+    if (pathname === '/') {
+      const checks = selfCheck();
+      return statusPage(env, {
+        name: 'bot-core canary',
+        icon: '🐤',
+        description: 'Deploys first whenever bot-core changes. If this is unhealthy, the fleet-wide update is blocked.',
+        ok: Object.values(checks).every((v) => v === 'ok'),
+        metrics: { 'bot-core': BOT_CORE_VERSION, 'Self-checks': `${Object.values(checks).filter((v) => v === 'ok').length}/${Object.keys(checks).length}` }
+      });
+    }
     if (pathname === '/webhook' && request.method === 'POST') {
       if (!env.BOT_TOKEN) return new Response('bot not configured', { status: 503 });
       if (!verifyWebhook(request, env)) return new Response('forbidden', { status: 403 });
@@ -57,14 +65,13 @@ export default {
       ctx.waitUntil(route(update, env, ctx.waitUntil.bind(ctx)));
       return new Response('ok');
     }
-
     return new Response('not found', { status: 404 });
   },
 
-  async scheduled(event, env, ctx) {
+  async scheduled(event, env) {
     const checks = selfCheck();
     const failed = Object.entries(checks).filter(([, v]) => v !== 'ok');
     if (failed.length) log.error('self-check failed', { cron: event.cron, checks });
-    else log.info('heartbeat', { cron: event.cron, checks });
+    else log.info('heartbeat', { cron: event.cron, bot_core: BOT_CORE_VERSION });
   }
 };
